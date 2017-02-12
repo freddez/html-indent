@@ -24,7 +24,14 @@ impl Html {
         print!("{}", s);
     }
     
-    fn indent(&self) {
+    fn write_indent(&self) {
+        for i in 0..self.indent_level {
+            print!(" ");
+        }
+    }
+    
+    fn indent(&mut self) {
+        let mut tag_stack = Vec::<String>::new();
         let path = Path::new(&self.path);
         let display = path.display();
         let file = match File::open(&path) {
@@ -33,8 +40,20 @@ impl Html {
             Ok(file) => file,
         };
         let buf = BufReader::new(&file);
-        for (num, line) in buf.lines().enumerate() {
+        let lines = buf.lines();
+        for line in lines {
+            self.write_indent();
             for word in line.unwrap().split_whitespace() {
+                let mut chars = word.chars();
+                if chars.next() == Some('<') {
+                    if chars.next() == Some('/') {
+                        self.indent_level -= 2;
+                    }
+                    else {
+                        tag_stack.push(word.parse().unwrap());
+                        self.indent_level += 2;
+                    }
+                }
                 self.write(&word);
                 self.write(" ");
             }
@@ -51,6 +70,6 @@ fn main() {
     }
     let path = args[1].clone();
     println!("The first argument is {}",path);
-    let htmlp = Html::new(path);
+    let mut htmlp = Html::new(path);
     htmlp.indent();
 }
