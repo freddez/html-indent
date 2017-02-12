@@ -1,35 +1,44 @@
 #[macro_use] extern crate lazy_static;
 extern crate regex;
-use regex::Regex;
+// use regex::Regex;
 use std::env;
 use std::fs::File;
-use std::io::prelude::*;
 use std::path::Path;
 use std::error::Error;
-use std::io::{Result, Read, BufRead, BufReader, Lines};
+use std::io::{BufRead, BufReader};
 
-pub struct Html<A: Read> {
-    lines: Lines<BufReader<A>>,
+pub struct Html {
+    path: String,
     indent_level: usize
 }
 
-impl<A: Read> Html<A> {
-    fn new(fd: A) -> Html<A> {
+impl Html {
+    fn new(path: String) -> Html {
         Html {
-            lines: BufReader::new(fd).lines(),
+            path: path,
             indent_level: 0,
         }
     }
 
-    fn write(&mut self, s: &str) {
+    fn write(&self, s: &str) {
         print!("{}", s);
     }
     
-    fn indent(mut self) {
-        for (num, line) in self.lines.enumerate() {
+    fn indent(&self) {
+        let path = Path::new(&self.path);
+        let display = path.display();
+        let file = match File::open(&path) {
+            Err(why) => panic!("couldn't open {}: {}", display,
+                               why.description()),
+            Ok(file) => file,
+        };
+        let buf = BufReader::new(&file);
+        for (num, line) in buf.lines().enumerate() {
             for word in line.unwrap().split_whitespace() {
                 self.write(&word);
+                self.write(" ");
             }
+            self.write("\n");
         }
     }
 }
@@ -40,14 +49,8 @@ fn main() {
         println!("No file specified");
         return;
     }
-    let path = Path::new(&args[1]);
-    let display = path.display();
-    println!("The first argument is {}", args[1]);
-    let mut file = match File::open(&path) {
-        Err(why) => panic!("couldn't open {}: {}", display,
-                           why.description()),
-        Ok(file) => file,
-    };
-    let buf = BufReader::new(file);
-    let mut htmlp = Html::new(buf);
+    let path = args[1].clone();
+    println!("The first argument is {}",path);
+    let htmlp = Html::new(path);
+    htmlp.indent();
 }
