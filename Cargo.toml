@@ -4,4 +4,5 @@ version = "0.1.0"
 authors = ["Frederic de Zorzi <fredz@pimentech.fr>"]
 
 [dependencies]
+lazy_static = "0.2"
 regex = "0.2" # https://doc.rust-lang.org/regex/regex/index.html

@@ -1,16 +1,20 @@
+#[macro_use] extern crate lazy_static;
+extern crate regex;
+use regex::Regex;
 use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
-use std::str::Chars;
 
-pub struct Html<'a> {
-    iter: Chars<'a>,
+pub struct Html {
+    s: String,
+    i: usize,
+    len: usize,
     indent_level: usize
 }
 
-impl<'a> Html<'a> {
+impl Html {
     fn new(path: &Path) -> Html {
         let display = path.display();
         let mut file = match File::open(&path) {
@@ -18,42 +22,37 @@ impl<'a> Html<'a> {
                                why.description()),
             Ok(file) => file,
         };
+        //let mut content = String::new();
+        //let mut content;
         let mut content = String::new();
         match file.read_to_string(&mut content) {
             Err(why) => panic!("couldn't read {}: {}", display,
                                why.description()),
             Ok(_) => Html {
-                iter: content.chars(),
+                s: content,
+                i: 0,
+                len:0,
                 indent_level: 0,
             },
         }
         
     }
 
-    fn indent(&mut self) -> &String {
-        let out = String::new();
+    fn indent(&mut self) {
+        self.len = self.s.len();
+        //let out = String::new();
         // let mut stack = Vec::new();
-        return &out;
-    }
-
-    fn ltrim(&mut self) {
-        loop {
-            match self.iter.next() {
-                Some(x) => println!("{}", x),
-                None => break,
-            }
+        while self.i < self.len {
+            self.i = self.ltrim();
+            println!("i : {}",self.i);
+            
+            break;
         }
+        // return &out;
     }
-}
 
-
-fn main() {
-    let args: Vec<_> = env::args().collect();
-    if args.len() <= 1 {
-        println!("No file specified");
-        return;
-    }
-    let path = Path::new(&args[1]);
-    println!("The first argument is {}", args[1]);
-    let mut htmlp = Html::new(path);
-}
+    fn ltrim(&mut self) -> usize {
+        lazy_static! {
+            static ref RSPACE: Regex = Regex::new(r"[^ ]").unwrap();
+        }
+        let nospace = RSPACE.find(&self.s[self.i..]).unwrap();
