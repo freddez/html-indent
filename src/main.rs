@@ -1,11 +1,11 @@
 #[macro_use] extern crate lazy_static;
 extern crate regex;
-// use regex::Regex;
+use regex::Regex;
 use std::env;
-use std::fs::File;
-use std::path::Path;
 use std::error::Error;
-use std::io::{BufRead, BufReader};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 pub struct Html {
     path: String,
@@ -31,34 +31,28 @@ impl Html {
     }
     
     fn indent(&mut self) {
+        lazy_static! {
+            static ref TAG: Regex = Regex::new("<(\"[^\"]*\"|'[^']*'|[^'\">])*>").unwrap();
+        }
         let mut tag_stack = Vec::<String>::new();
+        let mut i = 0;
         let path = Path::new(&self.path);
         let display = path.display();
-        let file = match File::open(&path) {
+        let mut file = match File::open(&path) {
             Err(why) => panic!("couldn't open {}: {}", display,
                                why.description()),
             Ok(file) => file,
         };
-        let buf = BufReader::new(&file);
-        let lines = buf.lines();
-        for line in lines {
-            self.write_indent();
-            for word in line.unwrap().split_whitespace() {
-                let mut chars = word.chars();
-                if chars.next() == Some('<') {
-                    if chars.next() == Some('/') {
-                        self.indent_level -= 2;
-                    }
-                    else {
-                        tag_stack.push(word.parse().unwrap());
-                        self.indent_level += 2;
-                    }
-                }
-                self.write(&word);
-                self.write(" ");
-            }
-            self.write("\n");
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
+        let mut start = 0;
+        let mut end = 0;
+        for tag in TAG.find_iter(&content) {
+            start = tag.start();
+            end = tag.end();
+            println!("Tag : {} {} {}", start, end, tag.as_str());
         }
+        
     }
 }
 
