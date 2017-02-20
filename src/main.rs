@@ -7,13 +7,10 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-
 pub struct Html {
     path: String,
     indent_level: usize
 }
-
-
 
 
 impl Html {
@@ -27,21 +24,17 @@ impl Html {
     fn write(&self, s: &str) {
         print!("{}", s);
     }
+
     fn writeln(&self, s: &str) {
         println!("{}", s);
     }
-    
+
     fn write_indent(&self) {
         for _ in 0..self.indent_level {
-            print!("_");
+            print!(" ");
         }
     }
-    fn write_indent2(&self) {
-        for _ in 0..self.indent_level {
-            print!(".");
-        }
-    }
-    
+
     fn indent(&mut self) {
         lazy_static! {
             static ref TAG: Regex = Regex::new(
@@ -67,43 +60,41 @@ impl Html {
             let mut line = iter_lines.next();
             loop {
                 let next = iter_lines.next();
-                match line {                    
-                    Some("") => {
-                        print!("");
-                        match(next) {
-                            Some(expr) => {
-                                self.writeln("");
-                                after_newline = true;
-                                line = next;
-                            },
-                            None => {
-                                break;
-                            }
+                if !line.is_some() {
+                    break;
+                }
+                let tline = line.unwrap().trim();
+                if tline == "" {
+                    match next {
+                        Some(_) => {
+                            self.writeln("");
+                            after_newline = true;
+                            line = next;
+                        },
+                        None => {
+                            break;
                         }
                     }
-                    Some(expr) => {
-                        if after_newline {
-                            self.write_indent2();
-                            after_newline = false;
-                        }
-                        self.write(expr.trim());
-                        match(next) {
-                            Some(expr) => {
-                                self.writeln("");
-                                after_newline = true;
-                                line = next;
-                            },
-                            None => {
-                                break;
-                            }
-                        }
+                }
+                else {
+                    if after_newline {
+                        self.write_indent();
+                        after_newline = false;
                     }
-                    None => {
-                        break;
+                    self.write(tline);
+                    match next {
+                        Some(_) => {
+                            self.writeln("");
+                            after_newline = true;
+                            line = next;
+                        },
+                        None => {
+                            break;
+                        }
                     }
                 }
             }
-            
+
             if tag.name("closing").is_none() {
                 if after_newline {
                     self.write_indent();
@@ -126,13 +117,13 @@ impl Html {
 }
 
 fn main() {
-    // let args: Vec<_> = env::args().collect();
-    // if args.len() <= 1 {
-    //     println!("No file specified");
-    //     return;
-    // }
-    // let path = args[1].clone();
-    let path = "/home/fredz/src/html-indent/test.kk";
+    let args: Vec<_> = env::args().collect();
+    if args.len() <= 1 {
+        println!("No file specified");
+        return;
+    }
+    let path = args[1].clone();
+    // let path = "/home/fredz/src/html-indent/test.kk";
     println!("The first argument is {}",path);
     let mut htmlp = Html::new(path.to_string());
     htmlp.indent();
