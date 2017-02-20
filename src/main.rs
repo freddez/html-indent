@@ -9,7 +9,6 @@ use std::path::Path;
 
 pub struct Html {
     path: String,
-    indent_level: usize,
     after_newline: bool
 }
 
@@ -18,7 +17,6 @@ impl Html {
     fn new(path: String) -> Html {
         Html {
             path: path,
-            indent_level: 0,
             after_newline: false,
         }
     }
@@ -31,16 +29,18 @@ impl Html {
         println!("{}", s);
     }
 
-    fn write_indent(&self) {
-        for _ in 0..self.indent_level {
+    fn write_indent(&self, level: usize) {
+        for _ in 0..level {
             print!(" ");
         }
     }
 
-    fn indent_lines(&mut self, str: &str) {
+    fn indent_lines(&mut self, str: &str, indent_level: usize, in_tag: bool) {
+        let mut level = indent_level;
         let txt = str.to_string();
         let mut iter_lines = txt.split("\n");
         let mut line = iter_lines.next();
+        let mut first_iter = true;
         loop {
             let next = iter_lines.next();
             if !line.is_some() {
@@ -61,7 +61,7 @@ impl Html {
             }
             else {
                 if self.after_newline {
-                    self.write_indent();
+                    self.write_indent(level);
                     self.after_newline = false;
                 }
                 self.write(tline);
@@ -74,6 +74,12 @@ impl Html {
                     None => {
                         break;
                     }
+                }
+            }
+            if first_iter {
+                first_iter = false;
+                if in_tag {
+                    level += 6;
                 }
             }
         }
@@ -96,23 +102,24 @@ impl Html {
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
         let mut i=0;
+        let mut indent_level = 0;
         for tag in TAG.captures_iter(&content) {
             let tag_start = tag.get(0).unwrap().start();
             let tag_end = tag.name("attrs").unwrap().end() + 1;
-            self.indent_lines(&content[i..tag_start]);
+            self.indent_lines(&content[i..tag_start], indent_level, false);
             if tag.name("closing").is_none() {
                 if self.after_newline {
-                    self.write_indent();
+                    self.write_indent(indent_level);
                 }
-                self.indent_lines(&content[tag_start..tag_end]);
-                self.indent_level = self.indent_level + 2;
+                self.indent_lines(&content[tag_start..tag_end], indent_level, true);
+                indent_level += 2;
             }
             else {
-                self.indent_level = self.indent_level - 2;
+                indent_level -= 2;
                 if self.after_newline {
-                    self.write_indent();
+                    self.write_indent(indent_level);
                 }
-                self.indent_lines(&content[tag_start..tag_end]);
+                self.indent_lines(&content[tag_start..tag_end], indent_level, true);
             }
             self.after_newline = false;
             i = tag_end;
@@ -122,13 +129,13 @@ impl Html {
 }
 
 fn main() {
-    // let args: Vec<_> = env::args().collect();
-    // if args.len() <= 1 {
-    //     println!("No file specified");
-    //     return;
-    // }
-    // let path = args[1].clone();
-    let path = "/home/fredz/src/html-indent/test.kk";
+    let args: Vec<_> = env::args().collect();
+    if args.len() <= 1 {
+        println!("No file specified");
+        return;
+    }
+    let path = args[1].clone();
+    // let path = "/home/fredz/src/html-indent/test.kk";
     println!("The first argument is {}",path);
     let mut htmlp = Html::new(path.to_string());
     htmlp.indent();
