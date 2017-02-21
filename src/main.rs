@@ -6,6 +6,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::ascii::AsciiExt;
 
 pub struct Html {
     path: String,
@@ -79,13 +80,18 @@ impl Html {
             if first_iter {
                 first_iter = false;
                 if in_tag {
-                    level += 6;
+                    level += 2;
                 }
             }
         }
     }
 
     fn indent(&mut self) {
+        let self_closing_tags = vec![
+            "area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link",
+            "meta", "param", "source", "track", "wbr"
+        ];
+
         lazy_static! {
             static ref TAG: Regex = Regex::new(
                 "<(?P<closing>/)?(?P<name>\\w+)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>"
@@ -108,17 +114,21 @@ impl Html {
             let tag_end = tag.name("attrs").unwrap().end() + 1;
             self.indent_lines(&content[i..tag_start], indent_level, false);
             if tag.name("closing").is_none() {
-                if self.after_newline {
-                    self.write_indent(indent_level);
-                }
                 self.indent_lines(&content[tag_start..tag_end], indent_level, true);
-                indent_level += 2;
+                let tag_name = tag.name("name").unwrap().as_str();
+                let mut self_closing = false;
+                for self_closing_tag in &self_closing_tags {
+                    if tag_name.eq_ignore_ascii_case(self_closing_tag) {
+                        self_closing = true;
+                        break;
+                    }
+                }
+                if !self_closing {
+                    indent_level += 2;
+                }
             }
             else {
                 indent_level -= 2;
-                if self.after_newline {
-                    self.write_indent(indent_level);
-                }
                 self.indent_lines(&content[tag_start..tag_end], indent_level, true);
             }
             self.after_newline = false;
