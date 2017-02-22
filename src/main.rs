@@ -124,7 +124,13 @@ impl Html {
                     }
                 }
                 if !self_closing {
-                    indent_level += 2;
+                    let end_tag = &content[tag_start..tag_end-1].trim_right();
+                    if end_tag.ends_with("/") {
+                        self_closing = true;
+                    }
+                    if !self_closing {
+                        indent_level += 2;
+                    }
                 }
             }
             else {
@@ -145,8 +151,6 @@ fn main() {
         return;
     }
     let path = args[1].clone();
-    // let path = "/home/fredz/src/html-indent/test.kk";
-    println!("The first argument is {}",path);
     let mut htmlp = Html::new(path.to_string());
     htmlp.indent();
 }
