@@ -86,32 +86,21 @@ impl Html {
         }
     }
 
-    fn indent(&mut self) {
-        let self_closing_tags = vec![
-            "area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link",
-            "meta", "param", "source", "track", "wbr"
-        ];
-
+    fn indent_tags(&mut self, content: &str, mut indent_level: usize) -> usize {
         lazy_static! {
             static ref TAG: Regex = Regex::new(
                 "<(?P<closing>/)?(?P<name>\\w+)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>"
             ).unwrap();
         }
-        let p = self.path.clone();
-        let path = Path::new(&p);
-        let display = path.display();
-        let mut file = match File::open(&path) {
-            Err(why) => panic!("couldn't open {}: {}", display,
-                               why.description()),
-            Ok(file) => file,
-        };
-        let mut content = String::new();
-        file.read_to_string(&mut content).unwrap();
+        let self_closing_tags = vec![
+            "area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link",
+            "meta", "param", "source", "track", "wbr"
+        ];
         let mut i=0;
-        let mut indent_level = 0;
+        let mut tag_end = 0;
         for tag in TAG.captures_iter(&content) {
             let tag_start = tag.get(0).unwrap().start();
-            let tag_end = tag.name("attrs").unwrap().end() + 1;
+            tag_end = tag.name("attrs").unwrap().end() + 1;
             self.indent_lines(&content[i..tag_start], indent_level, false);
             if tag.name("closing").is_none() {
                 self.indent_lines(&content[tag_start..tag_end], indent_level, true);
@@ -140,7 +129,36 @@ impl Html {
             self.after_newline = false;
             i = tag_end;
         }
-        self.writeln("");
+        self.indent_lines(&content[tag_end..], indent_level, false);
+        return indent_level;
+    }
+    
+    fn indent(&mut self) {
+        lazy_static! {
+            static ref COMMENT: Regex = Regex::new(
+                "<!--.*-->"
+            ).unwrap();
+        }
+        let p = self.path.clone();
+        let path = Path::new(&p);
+        let display = path.display();
+        let mut file = match File::open(&path) {
+            Err(why) => panic!("couldn't open {}: {}", display, why.description()),
+            Ok(file) => file,
+        };
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
+        let mut indent_level = 0;
+        let mut i=0;
+        let mut comment_end = 0;
+        for comment in COMMENT.find_iter(&content) {
+            let comment_start = comment.start();
+            comment_end = comment.end() + 1;
+            indent_level = self.indent_tags(&content[i..comment_start], indent_level);
+            self.write(&content[comment_start..comment_end]);
+            i = comment_end;
+        }
+        self.indent_tags(&content[comment_end..], indent_level);
     }
 }
 
