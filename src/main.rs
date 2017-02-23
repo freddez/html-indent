@@ -133,12 +133,45 @@ impl Html {
         return indent_level;
     }
     
-    fn indent(&mut self) {
+    fn indent_scripts(&mut self, content: &str, mut indent_level: usize) -> usize {
+        lazy_static! {
+            static ref SCRIPT: Regex = Regex::new(
+                "<script>.*</script>"
+            ).unwrap();
+        }
+        let mut i=0;
+        let mut comment_end = 0;
+        for comment in SCRIPT.find_iter(&content) {
+            let comment_start = comment.start();
+            comment_end = comment.end() + 1;
+            indent_level = self.indent_tags(&content[i..comment_start], indent_level);
+            self.write(&content[comment_start..comment_end]);
+            i = comment_end;
+        }
+        indent_level = self.indent_tags(&content[comment_end..], indent_level);
+        return indent_level;
+    }
+    
+    fn indent_comments(&mut self, content: &str) {
         lazy_static! {
             static ref COMMENT: Regex = Regex::new(
                 "<!--.*-->"
             ).unwrap();
         }
+        let mut indent_level = 0;
+        let mut i=0;
+        let mut comment_end = 0;
+        for comment in COMMENT.find_iter(&content) {
+            let comment_start = comment.start();
+            comment_end = comment.end() + 1;
+            indent_level = self.indent_scripts(&content[i..comment_start], indent_level);
+            self.write(&content[comment_start..comment_end]);
+            i = comment_end;
+        }
+        indent_level = self.indent_tags(&content[comment_end..], indent_level);
+    }
+    
+    fn indent(&mut self) {
         let p = self.path.clone();
         let path = Path::new(&p);
         let display = path.display();
@@ -148,17 +181,7 @@ impl Html {
         };
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
-        let mut indent_level = 0;
-        let mut i=0;
-        let mut comment_end = 0;
-        for comment in COMMENT.find_iter(&content) {
-            let comment_start = comment.start();
-            comment_end = comment.end() + 1;
-            indent_level = self.indent_tags(&content[i..comment_start], indent_level);
-            self.write(&content[comment_start..comment_end]);
-            i = comment_end;
-        }
-        self.indent_tags(&content[comment_end..], indent_level);
+        self.indent_comments(&content);
     }
 }
 
