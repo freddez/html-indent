@@ -1,5 +1,6 @@
 #[macro_use] extern crate lazy_static;
 extern crate regex;
+use std::process;
 use regex::Regex;
 use std::env;
 use std::error::Error;
@@ -10,7 +11,8 @@ use std::ascii::AsciiExt;
 
 pub struct Html {
     path: String,
-    after_newline: bool
+    after_newline: bool,
+    tag_stack: Vec<String>
 }
 
 
@@ -19,12 +21,17 @@ impl Html {
         Html {
             path: path,
             after_newline: false,
+            tag_stack: Vec::new()
         }
     }
 
     fn write(&self, s: &str) {
         print!("{}", s);
     }
+
+    // fn writet(&self, s: &str) {
+    //     print!("[[{}]]", s);
+    // }
 
     fn writeln(&self, s: &str) {
         println!("{}", s);
@@ -93,8 +100,8 @@ impl Html {
             ).unwrap();
         }
         let self_closing_tags = vec![
-            "area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link",
-            "meta", "param", "source", "track", "wbr"
+            "area", "base", "br", "col", "command", "embed", "hr", "img", "input",
+            "keygen", "link", "meta", "param", "source", "track", "wbr"
         ];
         let mut i=0;
         let mut tag_end = 0;
@@ -102,9 +109,9 @@ impl Html {
             let tag_start = tag.get(0).unwrap().start();
             tag_end = tag.name("attrs").unwrap().end() + 1;
             self.indent_lines(&content[i..tag_start], indent_level, false);
+            let tag_name = tag.name("name").unwrap().as_str().clone().to_string();
             if tag.name("closing").is_none() {
                 self.indent_lines(&content[tag_start..tag_end], indent_level, true);
-                let tag_name = tag.name("name").unwrap().as_str();
                 let mut self_closing = false;
                 for self_closing_tag in &self_closing_tags {
                     if tag_name.eq_ignore_ascii_case(self_closing_tag) {
@@ -118,11 +125,22 @@ impl Html {
                         self_closing = true;
                     }
                     if !self_closing {
+                        self.tag_stack.push(tag_name.clone().to_string());
                         indent_level += 2;
                     }
                 }
             }
             else {
+                match self.tag_stack.pop() {
+                    Some(open_tag) => if open_tag != tag_name {
+                        println!("Expected </{}>, found </{}>", tag_name, open_tag);
+                        process::exit(1);
+                    },
+                    None => {
+                        println!("Missing closing tag for {}", tag_name);
+                        process::exit(1)
+                    }
+                }
                 indent_level -= 2;
                 self.indent_lines(&content[tag_start..tag_end], indent_level, true);
             }
@@ -136,26 +154,37 @@ impl Html {
     fn indent_scripts(&mut self, content: &str, mut indent_level: usize) -> usize {
         lazy_static! {
             static ref SCRIPT: Regex = Regex::new(
-                "<script>.*</script>"
+                "(<script)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>(?P<content>(.|\n)*)</script>"
             ).unwrap();
         }
         let mut i=0;
-        let mut comment_end = 0;
-        for comment in SCRIPT.find_iter(&content) {
-            let comment_start = comment.start();
-            comment_end = comment.end() + 1;
-            indent_level = self.indent_tags(&content[i..comment_start], indent_level);
-            self.write(&content[comment_start..comment_end]);
-            i = comment_end;
+        let mut script_end = 0;
+        for script in SCRIPT.captures_iter(&content) {
+            let capture = script.get(0).unwrap();
+            let script_start = capture.start();
+            script_end = capture.end() + 1;
+            indent_level = self.indent_tags(&content[i..script_start], indent_level);
+            self.write_indent(indent_level);
+            self.write("<script");
+            if let Some(attrs) = script.name("attrs") {
+                self.write(&attrs.as_str());
+            }
+            self.write(">");
+            if let Some(content) = script.name("content") {            
+                self.indent_lines(&content.as_str(), indent_level, true);
+            }
+            self.write_indent(indent_level);
+            self.writeln("</script>");
+            i = script_end;
         }
-        indent_level = self.indent_tags(&content[comment_end..], indent_level);
+        indent_level = self.indent_tags(&content[script_end..], indent_level);
         return indent_level;
     }
     
     fn indent_comments(&mut self, content: &str) {
         lazy_static! {
             static ref COMMENT: Regex = Regex::new(
-                "<!--.*-->"
+                "<!--(.|\n)*-->"
             ).unwrap();
         }
         let mut indent_level = 0;
@@ -168,7 +197,7 @@ impl Html {
             self.write(&content[comment_start..comment_end]);
             i = comment_end;
         }
-        indent_level = self.indent_tags(&content[comment_end..], indent_level);
+        self.indent_tags(&content[comment_end..], indent_level);
     }
     
     fn indent(&mut self) {
