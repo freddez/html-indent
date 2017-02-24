@@ -1,0 +1,12 @@
+* TODO doc
+* DOING multi files processing, write option
+** TODO file input wildcard file:src/main.rs::wildcard 
+** DONE path option
+* DONE check missing closing tag
+* DONE non empty stack alert
+* TODO better exit on error file:src/main.rs::exit
+* TODO htmlcomment : relative indent, don't lstrip all
+* TODO minimal script brace indent file:src/main.rs::needs
+* TODO php tags
+* TODO check unicode vs bytes processing (use regex::bytes::Regex;)
+
