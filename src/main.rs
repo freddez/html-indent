@@ -1,13 +1,17 @@
 #[macro_use] extern crate lazy_static;
+#[macro_use] extern crate log;
 extern crate regex;
+extern crate walkdir;
 use std::process;
 use regex::Regex;
+//use regex::bytes::Regex;
 use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::ascii::AsciiExt;
+use walkdir::{DirEntry, WalkDir, WalkDirIterator};
 
 pub struct Html {
     path: String,
@@ -214,13 +218,47 @@ impl Html {
     }
 }
 
+
+fn is_hidden(entry: &DirEntry) -> bool {
+    entry.file_name()
+         .to_str()
+         .map(|s| s.starts_with("."))
+         .unwrap_or(false)
+}
+
+fn process_dir() {
+    let file_pattern = Regex::new("^(.*\\.html)$").unwrap(); // TODO : input wildcard to regex
+
+    for entry in WalkDir::new(".").into_iter().filter_entry(|e| !is_hidden(e)) {
+        let entry = match entry {
+            Ok(f) => f,
+            Err(e) => {
+                warn!("Error while walking directories: {}", e);
+                continue;
+            }
+        };
+        let path = entry.path();
+        debug!("Processing entry {:?}", path);
+        if file_pattern.is_match(entry.path().to_str().unwrap()) {
+            debug!("File {:?} is a match.", path);
+            let mut htmlp = Html::new(path);
+            htmlp.indent();
+        }
+    }
+}
+
 fn main() {
     let args: Vec<_> = env::args().collect();
     if args.len() <= 1 {
         println!("No file specified");
         return;
     }
-    let path = args[1].clone();
-    let mut htmlp = Html::new(path.to_string());
-    htmlp.indent();
+    match args[1] {
+        Some("-r") => process_dir(),
+        Some(filename) => {
+            let path = filename.clone();
+            let mut htmlp = Html::new(path.to_string());
+            htmlp.indent();
+        }
+    }
 }
