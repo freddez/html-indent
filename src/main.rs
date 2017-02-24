@@ -50,7 +50,7 @@ impl Html {
     //     self.output.push_str(s);
     //     self.output.push_str("]");
     // }
-    
+
     fn writeln(&mut self, s: &str) {
         self.write(s);
         self.output.push_str("\n");
@@ -68,7 +68,7 @@ impl Html {
             print!("{}", self.output);
         }
     }
-    
+
     fn indent_lines(&mut self, str: &str, indent_level: usize, in_tag: bool) {
         let mut level = indent_level;
         let txt = str.to_string();
@@ -179,7 +179,7 @@ impl Html {
         self.indent_lines(&content[tag_end..], indent_level, false);
         return indent_level;
     }
-    
+
     fn indent_scripts(&mut self, content: &str, mut indent_level: usize) -> usize {
         lazy_static! {
             static ref SCRIPT: Regex = Regex::new(
@@ -199,7 +199,8 @@ impl Html {
                 self.write(&attrs.as_str());
             }
             self.write(">");
-            if let Some(content) = script.name("content") {            
+            if let Some(content) = script.name("content") {
+                // needs script indent
                 self.indent_lines(&content.as_str(), indent_level, true);
             }
             self.write_indent(indent_level);
@@ -209,7 +210,7 @@ impl Html {
         indent_level = self.indent_tags(&content[script_end..], indent_level);
         return indent_level;
     }
-    
+
     fn indent_comments(&mut self, content: &str) {
         lazy_static! {
             static ref COMMENT: Regex = Regex::new(r"<!--[\s\S]*?-->").unwrap();
@@ -227,7 +228,7 @@ impl Html {
         self.indent_tags(&content[comment_end..], indent_level);
         self.print_output();
     }
-    
+
     fn indent(&mut self) {
         let p = self.path.clone();
         let path = Path::new(&p);
@@ -259,14 +260,12 @@ impl Html {
 
 fn is_hidden(entry: &DirEntry) -> bool {
     entry.file_name()
-         .to_str()
-         .map(|s| s.starts_with("."))
-         .unwrap_or(false)
+        .to_str()
+        .map(|s| s.starts_with("."))
+        .unwrap_or(false)
 }
 
-fn process_dir(dirname: String, dry_run: bool, print: bool) {
-    let file_pattern = Regex::new("^(.*\\.html)$").unwrap(); // TODO : input wildcard to regex
-
+fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool) {
     for entry in WalkDir::new(dirname).into_iter().filter_entry(|e| !is_hidden(e)) {
         let entry = match entry {
             Ok(f) => f,
@@ -276,8 +275,8 @@ fn process_dir(dirname: String, dry_run: bool, print: bool) {
             }
         };
         let path = entry.path();
-        debug!("Processing entry {:?}", path);
-        if file_pattern.is_match(entry.path().to_str().unwrap()) {
+        if path.to_str().unwrap().ends_with(file_ext) {
+            debug!("Processing entry {:?}", path);
             if let Some(filename) = path.to_str() {
                 let mut htmlp = Html::new(filename.to_string(), dry_run, print);
                 htmlp.indent();
@@ -293,11 +292,12 @@ fn print_usage(opts: Options) {
 
 fn main() {
     env_logger::init().unwrap();
-    warn!("starting up");
+    debug!("starting up");
     let args: Vec<_> = env::args().collect();
 
     let mut opts = Options::new();
     opts.optflag("r", "recursive", "process all files in directory");
+    opts.optopt("e", "extension", "file extension for recursive processing", "ext");
     opts.optflag("n", "dry-run", "dry run, don't write files");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("p", "print", "print html result to stdout");
@@ -312,7 +312,7 @@ fn main() {
     let print = matches.opt_present("p");
     let dry_run = matches.opt_present("n");
     let recursive = matches.opt_present("r");
-
+    
     let path = if !matches.free.is_empty() {
         matches.free[0].clone()
     } else {
@@ -333,7 +333,10 @@ fn main() {
     };
 
     if recursive {
-        process_dir(path, dry_run, print);
+        match matches.opt_str("e") {
+            Some(ext) => process_dir(path, ext.as_str(), dry_run, print),
+            None => process_dir(path, "html", dry_run, print),
+        };
     }
     else {
         let mut htmlp = Html::new(path.to_string(), dry_run, print);
