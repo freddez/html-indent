@@ -1,7 +1,8 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 extern crate env_logger;
-
+extern crate getopts;
+use getopts::Options;
 extern crate regex;
 extern crate walkdir;
 use std::process;
@@ -17,38 +18,54 @@ use walkdir::{DirEntry, WalkDir, WalkDirIterator};
 
 pub struct Html {
     path: String,
+    output: String,
+    line_number: usize,
     after_newline: bool,
-    tag_stack: Vec<String>
+    tag_stack: Vec<String>,
+    print: bool
 }
 
 
 impl Html {
-    fn new(path: String) -> Html {
+    fn new(path: String, print: bool) -> Html {
         Html {
             path: path,
+            output: String::new(),
+            line_number: 1,
             after_newline: false,
-            tag_stack: Vec::new()
+            tag_stack: Vec::new(),
+            print: print
         }
     }
 
-    fn write(&self, s: &str) {
-        print!("{}", s);
+    fn write(&mut self, s: &str) {
+        self.output.push_str(s);
     }
 
-    // fn writet(&self, s: &str) {
-    //     print!("[[{}]]", s);
-    // }
-
-    fn writeln(&self, s: &str) {
-        println!("{}", s);
+    fn writed(&mut self, s: &str) {
+        self.output.push_str("[");
+        self.output.push_str(s);
+        self.output.push_str("]");
+    }
+    
+    fn writeln(&mut self, s: &str) {
+        self.write(s);
+        self.output.push_str("\n");
+        self.line_number += 1
     }
 
-    fn write_indent(&self, level: usize) {
+    fn write_indent(&mut self, level: usize) {
         for _ in 0..level {
-            print!(" ");
+            self.output.push_str(" ");
         }
     }
 
+    fn print_output(&self) {
+        if self.print {
+            print!("{}", self.output);
+        }
+    }
+    
     fn indent_lines(&mut self, str: &str, indent_level: usize, in_tag: bool) {
         let mut level = indent_level;
         let txt = str.to_string();
@@ -139,11 +156,14 @@ impl Html {
             else {
                 match self.tag_stack.pop() {
                     Some(open_tag) => if open_tag != tag_name {
-                        println!("Expected </{}>, found </{}>", tag_name, open_tag);
+                        self.print_output();
+                        error!("Line {}, expected </{}>, found </{}>",
+                               self.line_number, open_tag, tag_name);
                         process::exit(1);
                     },
                     None => {
-                        println!("Missing closing tag for {}", tag_name);
+                        self.print_output();
+                        error!("Missing closing tag for {}", tag_name);
                         process::exit(1)
                     }
                 }
@@ -189,21 +209,20 @@ impl Html {
     
     fn indent_comments(&mut self, content: &str) {
         lazy_static! {
-            static ref COMMENT: Regex = Regex::new(
-                "<!--(.|\n)*-->"
-            ).unwrap();
+            static ref COMMENT: Regex = Regex::new(r"<!--[\s\S]*?-->").unwrap();
         }
         let mut indent_level = 0;
         let mut i=0;
         let mut comment_end = 0;
         for comment in COMMENT.find_iter(&content) {
             let comment_start = comment.start();
-            comment_end = comment.end() + 1;
+            comment_end = comment.end();
             indent_level = self.indent_scripts(&content[i..comment_start], indent_level);
             self.write(&content[comment_start..comment_end]);
             i = comment_end;
         }
         self.indent_tags(&content[comment_end..], indent_level);
+        self.print_output();
     }
     
     fn indent(&mut self) {
@@ -218,6 +237,9 @@ impl Html {
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
         self.indent_comments(&content);
+        for tag in self.tag_stack.pop() {
+            error!("Missing closing tag for {}", tag);
+        }
     }
 }
 
@@ -229,11 +251,10 @@ fn is_hidden(entry: &DirEntry) -> bool {
          .unwrap_or(false)
 }
 
-fn process_dir(dirname: String) {
+fn process_dir(dirname: String, print: bool) {
     let file_pattern = Regex::new("^(.*\\.html)$").unwrap(); // TODO : input wildcard to regex
 
     for entry in WalkDir::new(dirname).into_iter().filter_entry(|e| !is_hidden(e)) {
-    debug!("Ben quoi?");
         let entry = match entry {
             Ok(f) => f,
             Err(e) => {
@@ -245,36 +266,63 @@ fn process_dir(dirname: String) {
         debug!("Processing entry {:?}", path);
         if file_pattern.is_match(entry.path().to_str().unwrap()) {
             if let Some(filename) = path.to_str() {
-                let mut htmlp = Html::new(filename.to_string());
+                let mut htmlp = Html::new(filename.to_string(), print);
                 htmlp.indent();
             }
         }
     }
 }
 
+fn print_usage(opts: Options) {
+    let brief = format!("Usage: html-indent FILE [options]");
+    print!("{}", opts.usage(&brief));
+}
+
 fn main() {
     env_logger::init().unwrap();
     warn!("starting up");
     let args: Vec<_> = env::args().collect();
-    if args.len() <= 1 {
-        println!("No file specified");
+
+    let mut opts = Options::new();
+    opts.optflag("r", "recursive", "process all files in directory");
+    opts.optflag("h", "help", "print this help menu");
+    opts.optflag("p", "print", "print html result to stdout");
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => { m }
+        Err(f) => { panic!(f.to_string()) }
+    };
+    if matches.opt_present("h") {
+        print_usage(opts);
         return;
     }
-    if args[1] == "-r" {
-        match args.len() > 2 {
-            true => process_dir(args[2].clone()),
-            false => {
-                match env::current_dir().unwrap().to_str() {
-                    Some(dirname) => process_dir(dirname.to_string()),
-                    None => error!("Can't get current working directory")
+    let print = matches.opt_present("p");
+    let recursive = matches.opt_present("r");
+
+    let path = if !matches.free.is_empty() {
+        matches.free[0].clone()
+    } else {
+        if recursive {
+            match env::current_dir().unwrap().to_str() {
+                Some(dirname) => dirname.to_string(),
+                None => {
+                    error!("Can't get current working directory");
+                    return;
                 }
             }
         }
-        
+        else {
+            error!("No file specified");
+            print_usage(opts);
+            return;
+        }
+    };
+
+    if recursive {
+        process_dir(path, print);
     }
     else {
         let path = args[1].clone();
-        let mut htmlp = Html::new(path.to_string());
+        let mut htmlp = Html::new(path.to_string(), print);
         htmlp.indent();
     }
 }

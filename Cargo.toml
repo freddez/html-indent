@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Frederic de Zorzi <fredz@pimentech.fr>"]
 
 [dependencies]
+getopts = "0.2"
 lazy_static = "0.2"
 log = "0.3" # https://github.com/rust-lang-nursery/log
 env_logger = "0.3"
