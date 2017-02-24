@@ -6,5 +6,6 @@ authors = ["Frederic de Zorzi <fredz@pimentech.fr>"]
 [dependencies]
 lazy_static = "0.2"
 log = "0.3" # https://github.com/rust-lang-nursery/log
+env_logger = "0.3"
 regex = "0.2" # https://doc.rust-lang.org/regex/regex/index.html
 walkdir = "1" # https://github.com/BurntSushi/walkdir

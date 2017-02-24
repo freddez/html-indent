@@ -1,5 +1,7 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
+extern crate env_logger;
+
 extern crate regex;
 extern crate walkdir;
 use std::process;
@@ -208,6 +210,7 @@ impl Html {
         let p = self.path.clone();
         let path = Path::new(&p);
         let display = path.display();
+        info!("Processing {:?}", path);
         let mut file = match File::open(&path) {
             Err(why) => panic!("couldn't open {}: {}", display, why.description()),
             Ok(file) => file,
@@ -226,10 +229,11 @@ fn is_hidden(entry: &DirEntry) -> bool {
          .unwrap_or(false)
 }
 
-fn process_dir() {
+fn process_dir(dirname: String) {
     let file_pattern = Regex::new("^(.*\\.html)$").unwrap(); // TODO : input wildcard to regex
 
-    for entry in WalkDir::new(".").into_iter().filter_entry(|e| !is_hidden(e)) {
+    for entry in WalkDir::new(dirname).into_iter().filter_entry(|e| !is_hidden(e)) {
+    debug!("Ben quoi?");
         let entry = match entry {
             Ok(f) => f,
             Err(e) => {
@@ -240,25 +244,37 @@ fn process_dir() {
         let path = entry.path();
         debug!("Processing entry {:?}", path);
         if file_pattern.is_match(entry.path().to_str().unwrap()) {
-            debug!("File {:?} is a match.", path);
-            let mut htmlp = Html::new(path);
-            htmlp.indent();
+            if let Some(filename) = path.to_str() {
+                let mut htmlp = Html::new(filename.to_string());
+                htmlp.indent();
+            }
         }
     }
 }
 
 fn main() {
+    env_logger::init().unwrap();
+    warn!("starting up");
     let args: Vec<_> = env::args().collect();
     if args.len() <= 1 {
         println!("No file specified");
         return;
     }
-    match args[1] {
-        Some("-r") => process_dir(),
-        Some(filename) => {
-            let path = filename.clone();
-            let mut htmlp = Html::new(path.to_string());
-            htmlp.indent();
+    if args[1] == "-r" {
+        match args.len() > 2 {
+            true => process_dir(args[2].clone()),
+            false => {
+                match env::current_dir().unwrap().to_str() {
+                    Some(dirname) => process_dir(dirname.to_string()),
+                    None => error!("Can't get current working directory")
+                }
+            }
         }
+        
+    }
+    else {
+        let path = args[1].clone();
+        let mut htmlp = Html::new(path.to_string());
+        htmlp.indent();
     }
 }
