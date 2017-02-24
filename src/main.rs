@@ -11,7 +11,8 @@ use regex::Regex;
 use std::env;
 use std::error::Error;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
+// use std::io::prelude::*;
 use std::path::Path;
 use std::ascii::AsciiExt;
 use walkdir::{DirEntry, WalkDir, WalkDirIterator};
@@ -22,18 +23,20 @@ pub struct Html {
     line_number: usize,
     after_newline: bool,
     tag_stack: Vec<String>,
+    dry_run: bool,
     print: bool
 }
 
 
 impl Html {
-    fn new(path: String, print: bool) -> Html {
+    fn new(path: String, dry_run:bool, print: bool) -> Html {
         Html {
             path: path,
             output: String::new(),
             line_number: 1,
             after_newline: false,
             tag_stack: Vec::new(),
+            dry_run: dry_run,
             print: print
         }
     }
@@ -42,11 +45,11 @@ impl Html {
         self.output.push_str(s);
     }
 
-    fn writed(&mut self, s: &str) {
-        self.output.push_str("[");
-        self.output.push_str(s);
-        self.output.push_str("]");
-    }
+    // fn writed(&mut self, s: &str) {
+    //     self.output.push_str("[");
+    //     self.output.push_str(s);
+    //     self.output.push_str("]");
+    // }
     
     fn writeln(&mut self, s: &str) {
         self.write(s);
@@ -237,6 +240,16 @@ impl Html {
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
         self.indent_comments(&content);
+        if !self.dry_run && self.tag_stack.is_empty() {
+            let mut file = match File::create(&path) {
+                Err(why) => panic!("couldn't open {}: {}", display, why.description()),
+                Ok(file) => file,
+            };
+            match file.write(self.output.as_bytes()) {
+                Err(why) => panic!("couldn't write {}: {}", display, why.description()),
+                Ok(_) => {},
+            };
+        }
         for tag in self.tag_stack.pop() {
             error!("Missing closing tag for {}", tag);
         }
@@ -251,7 +264,7 @@ fn is_hidden(entry: &DirEntry) -> bool {
          .unwrap_or(false)
 }
 
-fn process_dir(dirname: String, print: bool) {
+fn process_dir(dirname: String, dry_run: bool, print: bool) {
     let file_pattern = Regex::new("^(.*\\.html)$").unwrap(); // TODO : input wildcard to regex
 
     for entry in WalkDir::new(dirname).into_iter().filter_entry(|e| !is_hidden(e)) {
@@ -266,7 +279,7 @@ fn process_dir(dirname: String, print: bool) {
         debug!("Processing entry {:?}", path);
         if file_pattern.is_match(entry.path().to_str().unwrap()) {
             if let Some(filename) = path.to_str() {
-                let mut htmlp = Html::new(filename.to_string(), print);
+                let mut htmlp = Html::new(filename.to_string(), dry_run, print);
                 htmlp.indent();
             }
         }
@@ -274,7 +287,7 @@ fn process_dir(dirname: String, print: bool) {
 }
 
 fn print_usage(opts: Options) {
-    let brief = format!("Usage: html-indent FILE [options]");
+    let brief = format!("Usage: html-indent [FILE] [options]");
     print!("{}", opts.usage(&brief));
 }
 
@@ -285,6 +298,7 @@ fn main() {
 
     let mut opts = Options::new();
     opts.optflag("r", "recursive", "process all files in directory");
+    opts.optflag("n", "dry-run", "dry run, don't write files");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("p", "print", "print html result to stdout");
     let matches = match opts.parse(&args[1..]) {
@@ -296,6 +310,7 @@ fn main() {
         return;
     }
     let print = matches.opt_present("p");
+    let dry_run = matches.opt_present("n");
     let recursive = matches.opt_present("r");
 
     let path = if !matches.free.is_empty() {
@@ -318,11 +333,10 @@ fn main() {
     };
 
     if recursive {
-        process_dir(path, print);
+        process_dir(path, dry_run, print);
     }
     else {
-        let path = args[1].clone();
-        let mut htmlp = Html::new(path.to_string(), print);
+        let mut htmlp = Html::new(path.to_string(), dry_run, print);
         htmlp.indent();
     }
 }
