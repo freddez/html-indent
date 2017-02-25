@@ -43,8 +43,5 @@ $ cargo install
   **Emacs**'s major modes have implemented **indent-region** function.
 * [Atom](https://atom.io/) editor. Unfortunately, the indentation doesn't work
   with newlines inside tags.
-  
-### Futures versions
 
-See [todo.org](todo.org)
 
