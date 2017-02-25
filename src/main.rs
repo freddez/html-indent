@@ -7,18 +7,15 @@ extern crate regex;
 extern crate walkdir;
 use std::process;
 use regex::Regex;
-//use regex::bytes::Regex;
 use std::env;
 use std::error::Error;
 use std::fs::File;
-use std::io::{Read, Write};
-// use std::io::prelude::*;
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::ascii::AsciiExt;
 use walkdir::{DirEntry, WalkDir, WalkDirIterator};
 
 pub struct Html {
-    path: String,
     output: String,
     line_number: usize,
     after_newline: bool,
@@ -29,9 +26,8 @@ pub struct Html {
 
 
 impl Html {
-    fn new(path: String, dry_run:bool, print: bool) -> Html {
+    fn new(dry_run:bool, print: bool) -> Html {
         Html {
-            path: path,
             output: String::new(),
             line_number: 1,
             after_newline: false,
@@ -223,28 +219,39 @@ impl Html {
         self.print_output();
     }
 
-    fn indent(&mut self) {
-        let p = self.path.clone();
-        let path = Path::new(&p);
-        let display = path.display();
-        info!("Processing {:?}", path);
-        let mut file = match File::open(&path) {
-            Err(why) => panic!("couldn't open {}: {}", display, why.description()),
-            Ok(file) => file,
+    fn indent(&mut self, path: Option<String>) {
+        match path {
+            Some(file_path) => {
+                let p = file_path.clone();
+                let path = Path::new(&p);
+                let display = path.display();
+                info!("Processing {:?}", path);
+
+                let mut file = match File::open(&path) {
+                    Err(why) => panic!("couldn't open {}: {}", display, why.description()),
+                    Ok(file) => file,
+                };
+                let mut content = String::new();
+                file.read_to_string(&mut content).unwrap();
+                self.indent_comments(&content);
+                if !self.dry_run && self.tag_stack.is_empty() {
+                    let mut file = match File::create(&file_path) {
+                        Err(why) => panic!("couldn't open {}: {}", display, why.description()),
+                        Ok(file) => file,
+                    };
+                    match file.write(self.output.as_bytes()) {
+                        Err(why) => panic!("couldn't write {}: {}", display, why.description()),
+                        Ok(_) => {},
+                    };
+                }
+            },
+            None => {
+                let mut content = String::new();
+                io::stdin().read_to_string(&mut content);
+                self.indent_comments(&content);
+                print!("{}", self.output);
+            }
         };
-        let mut content = String::new();
-        file.read_to_string(&mut content).unwrap();
-        self.indent_comments(&content);
-        if !self.dry_run && self.tag_stack.is_empty() {
-            let mut file = match File::create(&path) {
-                Err(why) => panic!("couldn't open {}: {}", display, why.description()),
-                Ok(file) => file,
-            };
-            match file.write(self.output.as_bytes()) {
-                Err(why) => panic!("couldn't write {}: {}", display, why.description()),
-                Ok(_) => {},
-            };
-        }
         for tag in self.tag_stack.pop() {
             error!("Missing closing tag for {}", tag);
         }
@@ -272,8 +279,8 @@ fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool) {
         if path.to_str().unwrap().ends_with(file_ext) {
             debug!("Processing entry {:?}", path);
             if let Some(filename) = path.to_str() {
-                let mut htmlp = Html::new(filename.to_string(), dry_run, print);
-                htmlp.indent();
+                let mut htmlp = Html::new(dry_run, print);
+                htmlp.indent(Some(filename.to_string()));
             }
         }
     }
@@ -307,10 +314,11 @@ fn main() {
     let dry_run = matches.opt_present("n");
     let recursive = matches.opt_present("r");
     let extension = matches.opt_str("e");
-    let path = if !matches.free.is_empty() {
-        matches.free[0].clone()
-    } else {
-        if recursive {
+
+    if recursive {
+        let path = if !matches.free.is_empty() {
+            matches.free[0].clone()
+        } else {
             match env::current_dir().unwrap().to_str() {
                 Some(dirname) => dirname.to_string(),
                 None => {
@@ -318,22 +326,19 @@ fn main() {
                     return;
                 }
             }
-        }
-        else {
-            error!("No file specified");
-            print_usage(opts);
-            return;
-        }
-    };
-
-    if recursive {
+        };
         match extension {
             Some(ext) => process_dir(path, ext.as_str(), dry_run, print),
             None => process_dir(path, "html", dry_run, print),
-        };
+        }
     }
     else {
-        let mut htmlp = Html::new(path.to_string(), dry_run, print);
-        htmlp.indent();
+        let path: Option<String> = if !matches.free.is_empty() {
+            Some(matches.free[0].clone())
+        } else {
+            None
+        };
+        let mut htmlp = Html::new(dry_run, print);
+        htmlp.indent(path);
     }
 }
