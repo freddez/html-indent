@@ -1,4 +1,3 @@
-* TODO doc
 * DONE multi files processing, write option
 ** DONE file input wildcard
 ** DONE path option

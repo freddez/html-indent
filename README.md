@@ -1,10 +1,50 @@
 html-indent
 -----------
 
-`html-indent` is a html file indenter and checker. This is a pre-release (see todo.org)
+`html-indent` is a html file indenter and checker. 
 
-### Alternatives
+It can be used for a single file, an entire tree, or from stdin (for editor
+plugin integration). 
 
-* [GNU Emacs](https://www.gnu.org/software/emacs/) environment.
+It supports multi-line tags, and preserves relative indentation in scripts and
+comments sections. Except spaces, the document structure is preserved and the
+only validation check is for balanced tags.
+
+### Command line options
+
+```
+Usage: html-indent [FILE] [options]
+
+Options:
+    -r, --recursive     process all files in directory 
+    -e, --extension ext file extension for recursive processing
+    -n, --dry-run       dry run, don't write files
+    -h, --help          print this help menu
+    -p, --print         print html result to stdout
+```
+
+
+### Installation
+
+`html-indent` is written in [Rust](http://rust-lang.org/). For the moment the
+only option is to build it from source, so get Rust and do
+
+```
+$ cargo install
+```
+
+### Known alternatives
+
+* [HTML Tidy](http://www.html-tidy.org/) : Tidy is designed to clean-up html
+  complete documents and I didn't succeed to indent html fragments with the
+  command line version.
+* [GNU Emacs](https://www.gnu.org/software/emacs/)  ~~editor~~ ~~universe~~
+  environment. The included **html-mode** and **web-mode**, like many
+  **Emacs**'s major modes have implemented **indent-region** function.
 * [Atom](https://atom.io/) editor. Unfortunately, the indentation doesn't work
   with newlines inside tags.
+  
+### Futures versions
+
+See [todo.org](todo.org)
+

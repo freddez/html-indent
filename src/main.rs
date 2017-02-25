@@ -74,7 +74,6 @@ impl Html {
             if !line.is_some() {
                 break;
             }
-            
             let tline = line.unwrap().trim_right();
             if tline == "" {
                 match next {
