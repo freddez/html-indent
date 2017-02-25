@@ -59,18 +59,23 @@ impl Html {
         }
     }
 
-    fn indent_lines(&mut self, str: &str, indent_level: usize, in_tag: bool) {
+    fn indent_lines(&mut self, str: &str, indent_level: usize, in_tag: bool, keep_indent: bool) {
+        lazy_static! {
+            static ref NON_W: Regex = Regex::new(r"\S").unwrap();
+        }
         let mut level = indent_level;
         let txt = str.to_string();
         let mut iter_lines = txt.split("\n");
         let mut line = iter_lines.next();
+        let mut block_position = 0;
         let mut first_iter = true;
         loop {
             let next = iter_lines.next();
             if !line.is_some() {
                 break;
             }
-            let tline = line.unwrap().trim();
+            
+            let tline = line.unwrap().trim_right();
             if tline == "" {
                 match next {
                     Some(_) => {
@@ -88,7 +93,19 @@ impl Html {
                     self.write_indent(level);
                     self.after_newline = false;
                 }
-                self.write(tline);
+                let mut nw_position = NON_W.find(&tline).unwrap().start();
+                if keep_indent {
+                    if block_position == 0 {
+                        block_position = match NON_W.find(&tline) {
+                            Some(r) => r.start(),
+                            None => 0
+                        };
+                    }
+                    if nw_position >= block_position {
+                        nw_position -= nw_position - block_position;
+                    }
+                }
+                self.write(&tline[nw_position..]);
                 match next {
                     Some(_) => {
                         self.writeln("");
@@ -124,10 +141,10 @@ impl Html {
         for tag in TAG.captures_iter(&content) {
             let tag_start = tag.get(0).unwrap().start();
             tag_end = tag.name("attrs").unwrap().end() + 1;
-            self.indent_lines(&content[i..tag_start], indent_level, false);
+            self.indent_lines(&content[i..tag_start], indent_level, false, false);
             let tag_name = tag.name("name").unwrap().as_str().clone().to_string();
             if tag.name("closing").is_none() {
-                self.indent_lines(&content[tag_start..tag_end], indent_level, true);
+                self.indent_lines(&content[tag_start..tag_end], indent_level, true, false);
                 let mut self_closing = false;
                 for self_closing_tag in &self_closing_tags {
                     if tag_name.eq_ignore_ascii_case(self_closing_tag) {
@@ -161,12 +178,12 @@ impl Html {
                     }
                 }
                 indent_level -= 2;
-                self.indent_lines(&content[tag_start..tag_end], indent_level, true);
+                self.indent_lines(&content[tag_start..tag_end], indent_level, true, false);
             }
             self.after_newline = false;
             i = tag_end;
         }
-        self.indent_lines(&content[tag_end..], indent_level, false);
+        self.indent_lines(&content[tag_end..], indent_level, false, false);
         return indent_level;
     }
 
@@ -190,8 +207,7 @@ impl Html {
             }
             self.write(">");
             if let Some(content) = script.name("content") {
-                // needs script indent
-                self.indent_lines(&content.as_str(), indent_level, true);
+                self.indent_lines(&content.as_str(), indent_level, true, true);
             }
             self.write_indent(indent_level);
             self.writeln("</script>");
@@ -212,7 +228,8 @@ impl Html {
             let comment_start = comment.start();
             comment_end = comment.end();
             indent_level = self.indent_scripts(&content[i..comment_start], indent_level);
-            self.write(&content[comment_start..comment_end]);
+            //self.write(&content[comment_start..comment_end]);
+            self.indent_lines(&content[comment_start..comment_end], indent_level, true, true);
             i = comment_end;
         }
         self.indent_tags(&content[comment_end..], indent_level);
