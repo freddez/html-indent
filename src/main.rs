@@ -45,12 +45,6 @@ impl Html {
         self.output.push_str(s);
     }
 
-    // fn writed(&mut self, s: &str) {
-    //     self.output.push_str("[");
-    //     self.output.push_str(s);
-    //     self.output.push_str("]");
-    // }
-
     fn writeln(&mut self, s: &str) {
         self.write(s);
         self.output.push_str("\n");
