@@ -1,6 +1,6 @@
 * TODO doc
-* DOING multi files processing, write option
-** TODO file input wildcard file:src/main.rs::wildcard 
+* DONE multi files processing, write option
+** DONE file input wildcard
 ** DONE path option
 * DONE check missing closing tag
 * DONE non empty stack alert

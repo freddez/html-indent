@@ -312,7 +312,7 @@ fn main() {
     let print = matches.opt_present("p");
     let dry_run = matches.opt_present("n");
     let recursive = matches.opt_present("r");
-    
+    let extension = matches.opt_str("e");
     let path = if !matches.free.is_empty() {
         matches.free[0].clone()
     } else {
@@ -333,7 +333,7 @@ fn main() {
     };
 
     if recursive {
-        match matches.opt_str("e") {
+        match extension {
             Some(ext) => process_dir(path, ext.as_str(), dry_run, print),
             None => process_dir(path, "html", dry_run, print),
         };
