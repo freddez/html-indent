@@ -16,7 +16,7 @@ only validation check is for balanced tags.
 Usage: html-indent [FILE] [options]
 
 Options:
-    -r, --recursive     process all files in directory 
+    -r, --recursive     process all files in directory tree
     -e, --extension ext file extension for recursive processing
     -n, --dry-run       dry run, don't write files
     -h, --help          print this help menu
@@ -27,7 +27,8 @@ Options:
 ### Installation
 
 `html-indent` is written in [Rust](http://rust-lang.org/). For the moment the
-only option is to build it from source, so get Rust and do
+only option is to build it from source, so [install Rust](https://rustup.rs/)
+then type
 
 ```
 $ cargo install

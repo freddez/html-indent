@@ -313,7 +313,7 @@ fn main() {
     let args: Vec<_> = env::args().collect();
 
     let mut opts = Options::new();
-    opts.optflag("r", "recursive", "process all files in directory");
+    opts.optflag("r", "recursive", "process all files in directory tree");
     opts.optopt("e", "extension", "file extension for recursive processing", "ext");
     opts.optflag("n", "dry-run", "dry run, don't write files");
     opts.optflag("h", "help", "print this help menu");
