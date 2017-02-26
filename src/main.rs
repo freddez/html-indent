@@ -223,6 +223,7 @@ impl Html {
         let mut indent_level = 0;
         let mut i=0;
         let mut comment_end = 0;
+        self.output = String::with_capacity(content.len());
         for comment in COMMENT.find_iter(&content) {
             let comment_start = comment.start();
             comment_end = comment.end();
