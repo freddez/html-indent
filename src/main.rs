@@ -15,54 +15,81 @@ use std::path::Path;
 use std::ascii::AsciiExt;
 use walkdir::{DirEntry, WalkDir, WalkDirIterator};
 
+lazy_static! {
+    static ref NON_W: Regex = Regex::new(
+        r"\S"
+    ).unwrap();
+    static ref TAG: Regex = Regex::new(
+        "<(?P<closing>/)?(?P<name>\\w+)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>"
+    ).unwrap();
+    static ref SCRIPT: Regex = Regex::new(
+        "(<script)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>(?P<content>(.|\n)*)</script>"
+    ).unwrap();
+    static ref COMMENT: Regex = Regex::new(
+        r"<!--[\s\S]*?-->"
+    ).unwrap();
+}
+
+
 pub struct Html {
     output: String,
     line_number: usize,
     after_newline: bool,
     tag_stack: Vec<String>,
     dry_run: bool,
-    print: bool
+    print: bool,
+    numeric: bool
 }
 
 
 impl Html {
-    fn new(dry_run:bool, print: bool) -> Html {
+    fn new(dry_run:bool, print: bool, numeric: bool) -> Html {
         Html {
             output: String::new(),
             line_number: 1,
             after_newline: false,
             tag_stack: Vec::new(),
             dry_run: dry_run,
-            print: print
+            print: print,
+            numeric: numeric
         }
     }
 
     fn write(&mut self, s: &str) {
-        self.output.push_str(s);
+        if !self.numeric {
+            self.output.push_str(s);
+        }
     }
 
     fn writeln(&mut self, s: &str) {
-        self.write(s);
-        self.output.push_str("\n");
-        self.line_number += 1
+        if !self.numeric {        
+            self.write(s);
+            self.output.push_str("\n");
+            self.line_number += 1
+        }
     }
 
     fn write_indent(&mut self, level: usize) {
-        for _ in 0..level {
-            self.output.push_str(" ");
+        if self.numeric {
+            let l = level.to_string();
+            self.output.push_str(&l);
+            self.output.push_str("\n");
+            self.line_number += 1
+        }
+        else {
+            for _ in 0..level {
+                self.output.push_str(" ");
+            }
         }
     }
 
     fn print_output(&self) {
-        if self.print {
+        if self.print || self.numeric {
             print!("{}", self.output);
         }
     }
 
     fn indent_lines(&mut self, str: &str, indent_level: usize, in_tag: bool, keep_indent: bool) {
-        lazy_static! {
-            static ref NON_W: Regex = Regex::new(r"\S").unwrap();
-        }
         let mut level = indent_level;
         let txt = str.to_string();
         let mut iter_lines = txt.split("\n");
@@ -92,16 +119,27 @@ impl Html {
                     self.write_indent(level);
                     self.after_newline = false;
                 }
-                let mut nw_position = NON_W.find(&tline).unwrap().start();
+                let mut nw_position = match NON_W.find(&tline) {
+                    Some(r) => r.start(),
+                    None => 0
+                };
                 if keep_indent {
                     if block_position == 0 {
-                        block_position = match NON_W.find(&tline) {
-                            Some(r) => r.start(),
-                            None => 0
-                        };
+                        block_position = nw_position;
                     }
-                    if nw_position >= block_position {
-                        nw_position -= nw_position - block_position;
+                    if self.numeric {
+                        let indent_level = if nw_position > block_position {
+                            nw_position-block_position
+                        }
+                        else {
+                            0
+                        };
+                        self.write_indent(indent_level);
+                    }
+                    else {
+                        if nw_position >= block_position {
+                            nw_position = block_position;
+                        }
                     }
                 }
                 self.write(&tline[nw_position..]);
@@ -126,11 +164,6 @@ impl Html {
     }
 
     fn indent_tags(&mut self, content: &str, mut indent_level: usize) -> usize {
-        lazy_static! {
-            static ref TAG: Regex = Regex::new(
-                "<(?P<closing>/)?(?P<name>\\w+)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>"
-            ).unwrap();
-        }
         let self_closing_tags = vec![
             "area", "base", "br", "col", "command", "embed", "hr", "img", "input",
             "keygen", "link", "meta", "param", "source", "track", "wbr"
@@ -187,11 +220,6 @@ impl Html {
     }
 
     fn indent_scripts(&mut self, content: &str, mut indent_level: usize) -> usize {
-        lazy_static! {
-            static ref SCRIPT: Regex = Regex::new(
-                "(<script)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>(?P<content>(.|\n)*)</script>"
-            ).unwrap();
-        }
         let mut i=0;
         let mut script_end = 0;
         for script in SCRIPT.captures_iter(&content) {
@@ -217,18 +245,20 @@ impl Html {
     }
 
     fn indent_comments(&mut self, content: &str) {
-        lazy_static! {
-            static ref COMMENT: Regex = Regex::new(r"<!--[\s\S]*?-->").unwrap();
-        }
-        let mut indent_level = 0;
+        self.output = String::with_capacity(content.len());
         let mut i=0;
         let mut comment_end = 0;
-        self.output = String::with_capacity(content.len());
+        let mut indent_level = match NON_W.find(&content) {
+            Some(r) => r.start(),
+            None => 0
+        };
+        if self.numeric {
+            self.write_indent(indent_level);
+        }
         for comment in COMMENT.find_iter(&content) {
             let comment_start = comment.start();
             comment_end = comment.end();
             indent_level = self.indent_scripts(&content[i..comment_start], indent_level);
-            //self.write(&content[comment_start..comment_end]);
             self.indent_lines(&content[comment_start..comment_end], indent_level, true, true);
             i = comment_end;
         }
@@ -251,7 +281,7 @@ impl Html {
                 let mut content = String::new();
                 file.read_to_string(&mut content).unwrap();
                 self.indent_comments(&content);
-                if !self.dry_run && self.tag_stack.is_empty() {
+                if !self.numeric && !self.dry_run && self.tag_stack.is_empty() {
                     let mut file = match File::create(&file_path) {
                         Err(why) => panic!("couldn't open {}: {}", display, why.description()),
                         Ok(file) => file,
@@ -283,7 +313,7 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool) {
+fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool, numeric:bool) {
     for entry in WalkDir::new(dirname).into_iter().filter_entry(|e| !is_hidden(e)) {
         let entry = match entry {
             Ok(f) => f,
@@ -296,7 +326,7 @@ fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool) {
         if path.to_str().unwrap().ends_with(file_ext) {
             debug!("Processing entry {:?}", path);
             if let Some(filename) = path.to_str() {
-                let mut htmlp = Html::new(dry_run, print);
+                let mut htmlp = Html::new(dry_run, print, numeric);
                 htmlp.indent(Some(filename.to_string()));
             }
         }
@@ -317,6 +347,7 @@ fn main() {
     opts.optflag("r", "recursive", "process all files in directory tree");
     opts.optopt("e", "extension", "file extension for recursive processing", "ext");
     opts.optflag("n", "dry-run", "dry run, don't write files");
+    opts.optflag("", "numeric", "output indentation value");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("p", "print", "print html result to stdout");
     let matches = match opts.parse(&args[1..]) {
@@ -331,6 +362,7 @@ fn main() {
     let dry_run = matches.opt_present("n");
     let recursive = matches.opt_present("r");
     let extension = matches.opt_str("e");
+    let numeric = matches.opt_present("numeric");
 
     if recursive {
         let path = if !matches.free.is_empty() {
@@ -345,8 +377,8 @@ fn main() {
             }
         };
         match extension {
-            Some(ext) => process_dir(path, ext.as_str(), dry_run, print),
-            None => process_dir(path, "html", dry_run, print),
+            Some(ext) => process_dir(path, ext.as_str(), dry_run, print, numeric),
+            None => process_dir(path, "html", dry_run, print, numeric),
         }
     }
     else {
@@ -355,7 +387,7 @@ fn main() {
         } else {
             None
         };
-        let mut htmlp = Html::new(dry_run, print);
+        let mut htmlp = Html::new(dry_run, print, numeric);
         htmlp.indent(path);
     }
 }
