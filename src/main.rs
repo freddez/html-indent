@@ -71,8 +71,7 @@ impl Html {
 
     fn write_indent(&mut self, level: usize) {
         if self.numeric {
-            let l = level.to_string();
-            self.output.push_str(&l);
+            self.output.push_str(&level.to_string());
             self.output.push_str("\n");
             self.line_number += 1
         }
@@ -115,10 +114,6 @@ impl Html {
                 }
             }
             else {
-                if self.after_newline {
-                    self.write_indent(level);
-                    self.after_newline = false;
-                }
                 let mut nw_position = match NON_W.find(&tline) {
                     Some(r) => r.start(),
                     None => 0
@@ -134,13 +129,21 @@ impl Html {
                         else {
                             0
                         };
-                        self.write_indent(indent_level);
+                        if self.after_newline {
+                            self.write_indent(level + indent_level);
+                        }
                     }
                     else {
                         if nw_position >= block_position {
                             nw_position = block_position;
                         }
                     }
+                }
+                if self.after_newline {
+                    if !self.numeric || !keep_indent {
+                        self.write_indent(level);
+                    }
+                    self.after_newline = false;
                 }
                 self.write(&tline[nw_position..]);
                 match next {
@@ -252,9 +255,7 @@ impl Html {
             Some(r) => r.start(),
             None => 0
         };
-        if self.numeric {
-            self.write_indent(indent_level);
-        }
+        self.write_indent(indent_level);
         for comment in COMMENT.find_iter(&content) {
             let comment_start = comment.start();
             comment_end = comment.end();
@@ -262,7 +263,7 @@ impl Html {
             self.indent_lines(&content[comment_start..comment_end], indent_level, true, true);
             i = comment_end;
         }
-        self.indent_tags(&content[comment_end..], indent_level);
+        self.indent_scripts(&content[comment_end..], indent_level);
         self.print_output();
     }
 
@@ -296,7 +297,9 @@ impl Html {
                 let mut content = String::new();
                 io::stdin().read_to_string(&mut content);
                 self.indent_comments(&content);
-                print!("{}", self.output);
+                if !self.numeric {
+                    print!("{}", self.output);
+                }
             }
         };
         for tag in self.tag_stack.pop() {
