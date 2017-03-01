@@ -51,9 +51,10 @@ in your `.vimrc`.
 * [HTML Tidy](http://www.html-tidy.org/) : Tidy is designed to clean-up html
   complete documents and I didn't succeed to indent html fragments with the
   command line version.
-* [GNU Emacs](https://www.gnu.org/software/emacs/)  ~~editor~~ ~~universe~~
-  environment. The included **html-mode** and **web-mode**, like many
-  **Emacs**'s major modes have implemented **indent-region** function.
+* [GNU Emacs](https://www.gnu.org/software/emacs/) ~~editor~~
+  ~~universe~~ environment. The included **html-mode**
+  and [web-mode](http://web-mode.org/), like many **Emacs**'s major
+  modes have implemented **indent-region** function.
 * [Atom](https://atom.io/) editor. Unfortunately, the indentation doesn't work
   with newlines inside tags.
 
