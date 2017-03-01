@@ -59,6 +59,6 @@ in your `.vimrc`.
 
 ### TODO
 
-    - [ ] Better error handling
-    - [ ] PHP integration
+- [ ] Better error handling
+- [ ] PHP integration
     
