@@ -57,4 +57,8 @@ in your `.vimrc`.
 * [Atom](https://atom.io/) editor. Unfortunately, the indentation doesn't work
   with newlines inside tags.
 
+### TODO
 
+    - [ ] Better error handling
+    - [ ] PHP integration
+    
