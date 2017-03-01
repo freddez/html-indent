@@ -16,10 +16,13 @@ only validation check is for balanced tags.
 Usage: html-indent [FILE] [options]
 
 Options:
+    -h, --help          print this help menu
     -r, --recursive     process all files in directory tree
     -e, --extension ext file extension for recursive processing
     -n, --dry-run       dry run, don't write files
-    -h, --help          print this help menu
+        --numeric       output indentation value
+    -l, --lines [start]-[end]
+                        limit output to selected lines
     -p, --print         print html result to stdout
 ```
 
@@ -33,6 +36,15 @@ then type
 ```
 $ cargo install
 ```
+
+### Editor integration
+
+There is a [Vim](http://www.vim.org/) plugin under `tools`
+directory. Just drop it in `~/.vim/indent/` and don't forget to have 
+```
+filetype plugin indent on
+```
+in your `.vimrc`.
 
 ### Known alternatives
 

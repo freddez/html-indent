@@ -38,12 +38,14 @@ pub struct Html {
     tag_stack: Vec<String>,
     dry_run: bool,
     print: bool,
-    numeric: bool
+    numeric: bool,
+    start: usize,
+    end: usize
 }
 
 
 impl Html {
-    fn new(dry_run:bool, print: bool, numeric: bool) -> Html {
+    fn new(dry_run:bool, print: bool, numeric: bool, start: usize, end: usize) -> Html {
         Html {
             output: String::new(),
             line_number: 1,
@@ -51,36 +53,40 @@ impl Html {
             tag_stack: Vec::new(),
             dry_run: dry_run,
             print: print,
-            numeric: numeric
+            numeric: numeric,
+            start: start,
+            end: end
         }
     }
 
     fn write(&mut self, s: &str) {
-        if !self.numeric {
+        if !self.numeric &&
+            (self.start == 0 || self.line_number >= self.start) &&
+            (self.end == 0 || self.line_number <= self.end) {
             self.output.push_str(s);
         }
     }
 
     fn writeln(&mut self, s: &str) {
-        if !self.numeric {        
-            self.write(s);
-            self.output.push_str("\n");
-            self.line_number += 1
-        }
+        self.write(s);
+        self.write("\n");
+        self.line_number += 1
     }
 
     fn write_indent(&mut self, level: usize) {
-        if self.numeric {
-            self.output.push_str(&level.to_string());
-            self.output.push_str("\n");
-            self.line_number += 1
-        }
-        else {
-            for _ in 0..level {
-                self.output.push_str(" ");
+        if (self.start == 0 || self.line_number >= self.start) &&
+            (self.end == 0 || self.line_number <= self.end) {
+                if self.numeric {
+                    self.output.push_str(&level.to_string());
+                    self.output.push_str("\n");
+                }
+                else {
+                    for _ in 0..level {
+                        self.output.push_str(" ");
+                    }
+                }
             }
-        }
-    }
+     }
 
     fn print_output(&self) {
         if self.print || self.numeric {
@@ -316,7 +322,7 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool, numeric:bool) {
+fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool) {
     for entry in WalkDir::new(dirname).into_iter().filter_entry(|e| !is_hidden(e)) {
         let entry = match entry {
             Ok(f) => f,
@@ -329,7 +335,7 @@ fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool, nume
         if path.to_str().unwrap().ends_with(file_ext) {
             debug!("Processing entry {:?}", path);
             if let Some(filename) = path.to_str() {
-                let mut htmlp = Html::new(dry_run, print, numeric);
+                let mut htmlp = Html::new(dry_run, print, false, 0, 0);
                 htmlp.indent(Some(filename.to_string()));
             }
         }
@@ -347,11 +353,12 @@ fn main() {
     let args: Vec<_> = env::args().collect();
 
     let mut opts = Options::new();
+    opts.optflag("h", "help", "print this help menu");
     opts.optflag("r", "recursive", "process all files in directory tree");
     opts.optopt("e", "extension", "file extension for recursive processing", "ext");
     opts.optflag("n", "dry-run", "dry run, don't write files");
     opts.optflag("", "numeric", "output indentation value");
-    opts.optflag("h", "help", "print this help menu");
+    opts.optopt("l", "lines", "limit output to selected lines", "[start]-[end]");
     opts.optflag("p", "print", "print html result to stdout");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -361,11 +368,32 @@ fn main() {
         print_usage(opts);
         return;
     }
-    let print = matches.opt_present("p");
-    let dry_run = matches.opt_present("n");
-    let recursive = matches.opt_present("r");
-    let extension = matches.opt_str("e");
+    let print = matches.opt_present("print");
+    let dry_run = matches.opt_present("dry-run");
+    let recursive = matches.opt_present("recursive");
+    let extension = matches.opt_str("extension");
+    let lines = matches.opt_str("lines");
     let numeric = matches.opt_present("numeric");
+    let (start, end) = match lines {
+        Some(start_end) =>
+            match start_end.find("-") {
+                Some(dash_position) => {
+                    (
+                        match (&start_end[..dash_position]).parse::<usize>() {
+                            Ok(pos) => pos, Err(_) => 0
+                        },
+                        match (&start_end[dash_position+1..]).parse::<usize>() {
+                            Ok(pos) => pos, Err(_) => 0
+                        }
+                    )
+                },
+                None => {
+                    error!("--numeric [start]-[end]");
+                    return;
+                }
+            },
+        None => (0, 0)
+    };
 
     if recursive {
         let path = if !matches.free.is_empty() {
@@ -380,8 +408,8 @@ fn main() {
             }
         };
         match extension {
-            Some(ext) => process_dir(path, ext.as_str(), dry_run, print, numeric),
-            None => process_dir(path, "html", dry_run, print, numeric),
+            Some(ext) => process_dir(path, ext.as_str(), dry_run, print),
+            None => process_dir(path, "html", dry_run, print),
         }
     }
     else {
@@ -390,7 +418,7 @@ fn main() {
         } else {
             None
         };
-        let mut htmlp = Html::new(dry_run, print, numeric);
+        let mut htmlp = Html::new(dry_run, print, numeric, start, end);
         htmlp.indent(path);
     }
 }
