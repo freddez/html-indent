@@ -1,10 +1,10 @@
 html-indent
 -----------
 
-`html-indent` is a html file indenter and checker. 
+`html-indent` is a html file indenter and checker.
 
 It can be used for a single file, an entire tree, or from stdin (for editor
-plugin integration). 
+plugin integration).
 
 It supports multi-line tags, and preserves relative indentation in scripts and
 comments sections. Except spaces, the document structure is preserved and the
@@ -40,7 +40,7 @@ $ cargo install
 ### Editor integration
 
 There is a [Vim](http://www.vim.org/) plugin under `tools`
-directory. Just drop it in `~/.vim/indent/` and don't forget to have 
+directory. Just drop it in `~/.vim/indent/` and don't forget to have
 ```
 filetype plugin indent on
 ```
@@ -62,4 +62,4 @@ in your `.vimrc`.
 
 - [ ] Better error handling
 - [ ] PHP integration
-    
+- [ ] Sublime text plugin
