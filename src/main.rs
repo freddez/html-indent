@@ -20,10 +20,10 @@ lazy_static! {
         r"\S"
     ).unwrap();
     static ref TAG: Regex = Regex::new(
-        "<(?P<closing>/)?(?P<name>\\w+)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>"
+        r#"<(?P<closing>/)?(?P<name>\w+)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>"#
     ).unwrap();
     static ref SCRIPT: Regex = Regex::new(
-        "(<script)(?P<attrs>(\"[^\"]*\"|'[^']*'|[^'\">])*)?>(?P<content>(.|\n)*)</script>"
+        r#"(<script)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>(?P<content>([\s\S]*))?</script>"#
     ).unwrap();
     static ref COMMENT: Regex = Regex::new(
         r"<!--[\s\S]*?-->"
@@ -49,7 +49,7 @@ impl Html {
         Html {
             output: String::new(),
             line_number: 1,
-            after_newline: false,
+            after_newline: true, // for first indent
             tag_stack: Vec::new(),
             dry_run: dry_run,
             print: print,
@@ -70,11 +70,13 @@ impl Html {
     fn writeln(&mut self, s: &str) {
         self.write(s);
         self.write("\n");
+        self.after_newline = true;
         self.line_number += 1
     }
 
     fn write_indent(&mut self, level: usize) {
-        if (self.start == 0 || self.line_number >= self.start) &&
+        if self.after_newline &&
+            (self.start == 0 || self.line_number >= self.start) &&
             (self.end == 0 || self.line_number <= self.end) {
                 if self.numeric {
                     self.output.push_str(&level.to_string());
@@ -85,6 +87,7 @@ impl Html {
                         self.output.push_str(" ");
                     }
                 }
+                self.after_newline = false;
             }
      }
 
@@ -111,7 +114,6 @@ impl Html {
                 match next {
                     Some(_) => {
                         self.writeln("");
-                        self.after_newline = true;
                         line = next;
                     },
                     None => {
@@ -135,9 +137,7 @@ impl Html {
                         else {
                             0
                         };
-                        if self.after_newline {
-                            self.write_indent(level + indent_level);
-                        }
+                        self.write_indent(level + indent_level);
                     }
                     else {
                         if nw_position >= block_position {
@@ -145,17 +145,13 @@ impl Html {
                         }
                     }
                 }
-                if self.after_newline {
-                    if !self.numeric || !keep_indent {
-                        self.write_indent(level);
-                    }
-                    self.after_newline = false;
+                if !self.numeric || !keep_indent {
+                    self.write_indent(level);
                 }
                 self.write(&tline[nw_position..]);
                 match next {
                     Some(_) => {
                         self.writeln("");
-                        self.after_newline = true;
                         line = next;
                     },
                     None => {
@@ -221,7 +217,6 @@ impl Html {
                 indent_level -= 2;
                 self.indent_lines(&content[tag_start..tag_end], indent_level, true, false);
             }
-            self.after_newline = false;
             i = tag_end;
         }
         self.indent_lines(&content[tag_end..], indent_level, false, false);
@@ -246,7 +241,7 @@ impl Html {
                 self.indent_lines(&content.as_str(), indent_level, true, true);
             }
             self.write_indent(indent_level);
-            self.writeln("</script>");
+            self.write("</script>");
             i = script_end;
         }
         indent_level = self.indent_tags(&content[script_end..], indent_level);
