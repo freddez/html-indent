@@ -22,8 +22,11 @@ lazy_static! {
     static ref TAG: Regex = Regex::new(
         r#"<(?P<closing>/)?(?P<name>\w+)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>"#
     ).unwrap();
-    static ref SCRIPT: Regex = Regex::new(
-        r#"(<script)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>(?P<content>(?m:.*))?</script>"#
+    static ref SCRIPT_TAG: Regex = Regex::new(
+        r#"<(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#
+    ).unwrap();
+    static ref SCRIPT_CLOSE_TAG: Regex = Regex::new(
+        r#"</(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#
     ).unwrap();
     static ref COMMENT: Regex = Regex::new(
         r"<!--[\s\S]*?-->"
@@ -225,26 +228,24 @@ impl Html {
 
     fn indent_scripts(&mut self, content: &str, mut indent_level: usize) -> usize {
         let mut i=0;
-        let mut script_end = 0;
-        for script in SCRIPT.captures_iter(&content) {
-            let capture = script.get(0).unwrap();
-            let script_start = capture.start();
-            script_end = capture.end() + 1;
-            indent_level = self.indent_tags(&content[i..script_start], indent_level);
+        for script in SCRIPT_TAG.find_iter(&content) {
+            indent_level = self.indent_tags(&content[i..script.start()], indent_level);
             self.write_indent(indent_level);
-            self.write("<script");
-            if let Some(attrs) = script.name("attrs") {
-                self.write(&attrs.as_str());
+            self.write(script.as_str());
+            i = script.end();
+            match SCRIPT_CLOSE_TAG.find(&content[i..]) {
+                Some(close_script) => {
+                    self.indent_lines(&content[i..close_script.start()+i], indent_level, true, true);
+                    self.write_indent(indent_level);
+                    self.write(close_script.as_str());
+                    i += close_script.end();
+                },
+                None => {
+                    error!("Missing closing script tag");
+                }
             }
-            self.write(">");
-            if let Some(content) = script.name("content") {
-                self.indent_lines(&content.as_str(), indent_level, true, true);
-            }
-            self.write_indent(indent_level);
-            self.writeln("</script>");
-            i = script_end;
         }
-        indent_level = self.indent_tags(&content[script_end..], indent_level);
+        indent_level = self.indent_tags(&content[i..], indent_level);
         return indent_level;
     }
 
