@@ -23,7 +23,7 @@ lazy_static! {
         r#"<(?P<closing>/)?(?P<name>\w+)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>"#
     ).unwrap();
     static ref SCRIPT: Regex = Regex::new(
-        r#"(<script)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>(?P<content>([\s\S]*))?</script>"#
+        r#"(<script)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>(?P<content>(?m:.*))?</script>"#
     ).unwrap();
     static ref COMMENT: Regex = Regex::new(
         r"<!--[\s\S]*?-->"
@@ -241,7 +241,7 @@ impl Html {
                 self.indent_lines(&content.as_str(), indent_level, true, true);
             }
             self.write_indent(indent_level);
-            self.write("</script>");
+            self.writeln("</script>");
             i = script_end;
         }
         indent_level = self.indent_tags(&content[script_end..], indent_level);
