@@ -23,10 +23,10 @@ lazy_static! {
         r#"<(?P<closing>/)?(?P<name>\w+)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>"#
     ).unwrap();
     static ref SCRIPT_TAG: Regex = Regex::new(
-        r#"<(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#
+        r#"<(?i:script|style)("[^"]*"|'[^']*'|[^'">])*>"#
     ).unwrap();
     static ref SCRIPT_CLOSE_TAG: Regex = Regex::new(
-        r#"</(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#
+        r#"</(?i:script|style)("[^"]*"|'[^']*'|[^'">])*>"#
     ).unwrap();
     static ref COMMENT: Regex = Regex::new(
         r"<!--[\s\S]*?-->"
@@ -116,6 +116,9 @@ impl Html {
             if tline == "" {
                 match next {
                     Some(_) => {
+                        if self.numeric {
+                            self.write_indent(0);
+                        }
                         self.writeln("");
                         line = next;
                     },
@@ -154,6 +157,9 @@ impl Html {
                 self.write(&tline[nw_position..]);
                 match next {
                     Some(_) => {
+                        if self.numeric {
+                            self.write_indent(0);
+                        }
                         self.writeln("");
                         line = next;
                     },
