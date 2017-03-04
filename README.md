@@ -21,6 +21,7 @@ Options:
     -e, --extension ext file extension for recursive processing
     -n, --dry-run       dry run, don't write files
         --numeric       output indentation value
+    -c, --check         check malformed tags
     -l, --lines [start]-[end]
                         limit output to selected lines
     -p, --print         print html result to stdout

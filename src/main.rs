@@ -23,10 +23,10 @@ lazy_static! {
         r#"<(?P<closing>/)?(?P<name>\w+)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>"#
     ).unwrap();
     static ref SCRIPT_TAG: Regex = Regex::new(
-        r#"<(?i:script|style)("[^"]*"|'[^']*'|[^'">])*>"#
+        r#"<(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#
     ).unwrap();
     static ref SCRIPT_CLOSE_TAG: Regex = Regex::new(
-        r#"</(?i:script|style)("[^"]*"|'[^']*'|[^'">])*>"#
+        r#"</(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#
     ).unwrap();
     static ref COMMENT: Regex = Regex::new(
         r"<!--[\s\S]*?-->"
@@ -42,13 +42,14 @@ pub struct Html {
     dry_run: bool,
     print: bool,
     numeric: bool,
+    check: bool,
     start: usize,
     end: usize
 }
 
 
 impl Html {
-    fn new(dry_run:bool, print: bool, numeric: bool, start: usize, end: usize) -> Html {
+    fn new(dry_run:bool, print: bool, numeric: bool, check: bool, start: usize, end: usize) -> Html {
         Html {
             output: String::new(),
             line_number: 1,
@@ -57,6 +58,7 @@ impl Html {
             dry_run: dry_run,
             print: print,
             numeric: numeric,
+            check: check,
             start: start,
             end: end
         }
@@ -204,23 +206,27 @@ impl Html {
                         self_closing = true;
                     }
                     if !self_closing {
-                        self.tag_stack.push(tag_name.clone().to_string());
+                        if self.check {
+                            self.tag_stack.push(tag_name.clone().to_string());
+                        }
                         indent_level += 2;
                     }
                 }
             }
             else {
-                match self.tag_stack.pop() {
-                    Some(open_tag) => if open_tag != tag_name {
-                        self.print_output();
-                        error!("Line {}, expected </{}>, found </{}>",
-                               self.line_number, open_tag, tag_name);
-                        process::exit(1);
-                    },
-                    None => {
-                        self.print_output();
-                        error!("Missing closing tag for {}", tag_name);
-                        process::exit(1)
+                if self.check {
+                    match self.tag_stack.pop() {
+                        Some(open_tag) => if open_tag != tag_name {
+                            self.print_output();
+                            error!("Line {}, expected </{}>, found </{}>",
+                                   self.line_number, open_tag, tag_name);
+                            process::exit(1);
+                        },
+                        None => {
+                            self.print_output();
+                            error!("Missing closing tag for {}", tag_name);
+                            process::exit(1)
+                        }
                     }
                 }
                 indent_level -= 2;
@@ -235,7 +241,11 @@ impl Html {
     fn indent_scripts(&mut self, content: &str, mut indent_level: usize) -> usize {
         let mut i=0;
         for script in SCRIPT_TAG.find_iter(&content) {
-            indent_level = self.indent_tags(&content[i..script.start()], indent_level);
+            let script_start = script.start();
+            if i >= script_start {
+                continue; // script inside script
+            }
+            indent_level = self.indent_tags(&content[i..script_start], indent_level);
             self.write_indent(indent_level);
             self.write(script.as_str());
             i = script.end();
@@ -290,7 +300,7 @@ impl Html {
                 let mut content = String::new();
                 file.read_to_string(&mut content).unwrap();
                 self.indent_comments(&content);
-                if !self.numeric && !self.dry_run && self.tag_stack.is_empty() {
+                if !self.numeric && !self.dry_run {
                     let mut file = match File::create(&file_path) {
                         Err(why) => panic!("couldn't open {}: {}", display, why.description()),
                         Ok(file) => file,
@@ -303,15 +313,17 @@ impl Html {
             },
             None => {
                 let mut content = String::new();
-                io::stdin().read_to_string(&mut content);
+                let _ = io::stdin().read_to_string(&mut content);
                 self.indent_comments(&content);
                 if !self.numeric {
                     print!("{}", self.output);
                 }
             }
         };
-        for tag in self.tag_stack.pop() {
-            error!("Missing closing tag for {}", tag);
+        if self.check {
+            for tag in self.tag_stack.pop() {
+                error!("Missing closing tag for {}", tag);
+            }
         }
     }
 }
@@ -324,7 +336,7 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool) {
+fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool, check: bool) {
     for entry in WalkDir::new(dirname).into_iter().filter_entry(|e| !is_hidden(e)) {
         let entry = match entry {
             Ok(f) => f,
@@ -337,7 +349,7 @@ fn process_dir(dirname: String, file_ext: &str, dry_run: bool, print: bool) {
         if path.to_str().unwrap().ends_with(file_ext) {
             debug!("Processing entry {:?}", path);
             if let Some(filename) = path.to_str() {
-                let mut htmlp = Html::new(dry_run, print, false, 0, 0);
+                let mut htmlp = Html::new(dry_run, print, false, check, 0, 0);
                 htmlp.indent(Some(filename.to_string()));
             }
         }
@@ -360,6 +372,7 @@ fn main() {
     opts.optopt("e", "extension", "file extension for recursive processing", "ext");
     opts.optflag("n", "dry-run", "dry run, don't write files");
     opts.optflag("", "numeric", "output indentation value");
+    opts.optflag("c", "check", "check malformed tags");
     opts.optopt("l", "lines", "limit output to selected lines", "[start]-[end]");
     opts.optflag("p", "print", "print html result to stdout");
     let matches = match opts.parse(&args[1..]) {
@@ -376,6 +389,7 @@ fn main() {
     let extension = matches.opt_str("extension");
     let lines = matches.opt_str("lines");
     let numeric = matches.opt_present("numeric");
+    let check = matches.opt_present("check");
     let (start, end) = match lines {
         Some(start_end) =>
             match start_end.find("-") {
@@ -410,8 +424,8 @@ fn main() {
             }
         };
         match extension {
-            Some(ext) => process_dir(path, ext.as_str(), dry_run, print),
-            None => process_dir(path, "html", dry_run, print),
+            Some(ext) => process_dir(path, ext.as_str(), dry_run, print, check),
+            None => process_dir(path, "html", dry_run, print, check),
         }
     }
     else {
@@ -420,7 +434,7 @@ fn main() {
         } else {
             None
         };
-        let mut htmlp = Html::new(dry_run, print, numeric, start, end);
+        let mut htmlp = Html::new(dry_run, print, numeric, check, start, end);
         htmlp.indent(path);
     }
 }
