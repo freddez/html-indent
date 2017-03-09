@@ -22,15 +22,6 @@ lazy_static! {
     static ref TAG: Regex = Regex::new(
         r#"<(?P<closing>/)?(?P<name>\w+)(?P<attrs>("[^"]*"|'[^']*'|[^'">])*)?>"#
     ).unwrap();
-    static ref SCRIPT_TAG: Regex = Regex::new(
-        r#"<(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#
-    ).unwrap();
-    static ref SCRIPT_CLOSE_TAG: Regex = Regex::new(
-        r#"</(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#
-    ).unwrap();
-    static ref COMMENT: Regex = Regex::new(
-        r"<!--[\s\S]*?-->"
-    ).unwrap();
 }
 
 
@@ -179,7 +170,8 @@ impl Html {
         }
     }
 
-    fn indent_tags(&mut self, content: &str, mut indent_level: usize) -> usize {
+    fn indent_tags(&mut self, _: &Vec<(Regex, Regex)>, _: usize, content: &str,
+                   mut indent_level: usize) -> usize {
         let self_closing_tags = vec![
             "area", "base", "br", "col", "command", "embed", "hr", "img", "input",
             "keygen", "link", "meta", "param", "source", "track", "wbr"
@@ -229,7 +221,9 @@ impl Html {
                         }
                     }
                 }
-                indent_level -= 2;
+                if indent_level >= 2 {
+                    indent_level -= 2;
+                }
                 self.indent_lines(&content[tag_start..tag_end], indent_level, true, false);
             }
             i = tag_end;
@@ -238,53 +232,73 @@ impl Html {
         return indent_level;
     }
 
-    fn indent_scripts(&mut self, content: &str, mut indent_level: usize) -> usize {
+    fn indent_parts(&mut self, block_stack: &Vec<(Regex, Regex)>, stack_level: usize, content: &str,
+                    mut indent_level: usize) -> usize {
         let mut i=0;
-        for script in SCRIPT_TAG.find_iter(&content) {
-            let script_start = script.start();
-            if i >= script_start {
-                continue; // script inside script
+        let (ref open_expr, ref close_expr) = block_stack[stack_level];
+        let mut sub_stack_level = stack_level;
+        let sub_indent_func = if stack_level == 0 {
+            Html::indent_tags
+        } else {
+            sub_stack_level -= 1;
+            Html::indent_parts
+        };
+        for open in open_expr.find_iter(&content) {
+            let open_start = open.start();
+            if i > open_start {
+                if indent_level >= 2 {
+                    indent_level -=2 ;
+                }
+                continue; // open inside open
             }
-            indent_level = self.indent_tags(&content[i..script_start], indent_level);
+            indent_level = sub_indent_func(self, &block_stack, sub_stack_level,
+                                           &content[i..open_start], indent_level);
             self.write_indent(indent_level);
-            self.write(script.as_str());
-            i = script.end();
-            match SCRIPT_CLOSE_TAG.find(&content[i..]) {
-                Some(close_script) => {
-                    self.indent_lines(&content[i..close_script.start()+i], indent_level, true, true);
+            self.write(open.as_str());
+            let open_end = open.end();
+            if content.ends_with("\n") {
+                i = open_end - 1;
+            }
+            else {
+                i = open_end;
+            }
+            match close_expr.find(&content[i..]) {
+                Some(close_open) => {
+                    println!("{} : {}..{}", open_expr, i, close_open.start()+i);
+                    self.indent_lines(&content[i..close_open.start()+i], indent_level, true, true);
                     self.write_indent(indent_level);
-                    self.write(close_script.as_str());
-                    i += close_script.end();
+                    self.write(close_open.as_str());
+                    i += close_open.end();
                 },
                 None => {
-                    error!("Missing closing script tag");
+                    error!("Missing closing expr");
                 }
             }
         }
-        indent_level = self.indent_tags(&content[i..], indent_level);
+        indent_level = sub_indent_func(self, &block_stack, sub_stack_level, &content[i..],
+                                       indent_level);
         return indent_level;
     }
 
-    fn indent_comments(&mut self, content: &str) {
-        self.output = String::with_capacity(content.len());
-        let mut i=0;
-        let mut comment_end = 0;
-        let mut indent_level = match NON_W.find(&content) {
+    fn do_indent(&mut self, content: &str) {
+        let script_open = Regex::new(r#"<(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#).unwrap();
+        let script_close = Regex::new(r#"</(?i:script)("[^"]*"|'[^']*'|[^'">])*>"#).unwrap();
+        let comment_open = Regex::new(r"<!--").unwrap();
+        let comment_close = Regex::new(r"-->").unwrap();
+        let block_stack = vec![
+            (script_open, script_close),
+            (comment_open, comment_close),
+            (Regex::new(r"<\?[^=]").unwrap(), Regex::new(r"\?>").unwrap())
+        ];
+        let indent_level = match NON_W.find(&content) {
             Some(r) => r.start(),
             None => 0
         };
         self.write_indent(indent_level);
-        for comment in COMMENT.find_iter(&content) {
-            let comment_start = comment.start();
-            comment_end = comment.end();
-            indent_level = self.indent_scripts(&content[i..comment_start], indent_level);
-            self.indent_lines(&content[comment_start..comment_end], indent_level, true, true);
-            i = comment_end;
-        }
-        self.indent_scripts(&content[comment_end..], indent_level);
+        self.indent_parts(&block_stack, block_stack.len() - 1, &content, indent_level);
         self.print_output();
     }
-
+    
     fn indent(&mut self, path: Option<String>) {
         match path {
             Some(file_path) => {
@@ -299,7 +313,8 @@ impl Html {
                 };
                 let mut content = String::new();
                 file.read_to_string(&mut content).unwrap();
-                self.indent_comments(&content);
+                self.output = String::with_capacity(content.len());
+                self.do_indent(&content);
                 if !self.numeric && !self.dry_run {
                     let mut file = match File::create(&file_path) {
                         Err(why) => panic!("couldn't open {}: {}", display, why.description()),
@@ -314,7 +329,7 @@ impl Html {
             None => {
                 let mut content = String::new();
                 let _ = io::stdin().read_to_string(&mut content);
-                self.indent_comments(&content);
+                self.do_indent(&content);
                 if !self.numeric {
                     print!("{}", self.output);
                 }

@@ -64,3 +64,4 @@ in your `.vimrc`.
 - [ ] Better error handling
 - [ ] PHP integration
 - [ ] Sublime text plugin
+- [ ] Non utf-8 files support
