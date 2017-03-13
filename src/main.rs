@@ -232,16 +232,14 @@ impl Html {
         return indent_level;
     }
 
-    fn indent_parts(&mut self, block_stack: &Vec<(Regex, Regex)>, stack_level: usize, content: &str,
-                    mut indent_level: usize) -> usize {
+    fn indent_parts(&mut self, block_stack: &Vec<(Regex, Regex)>, mut stack_level: usize,
+                    content: &str, mut indent_level: usize) -> usize {
         let mut i=0;
         let (ref open_expr, ref close_expr) = block_stack[stack_level];
-        let mut sub_stack_level = stack_level;
         let sub_indent_func = if stack_level == 0 {
             Html::indent_tags
         } else {
-            sub_stack_level -= 1;
-            Html::indent_parts
+            stack_level -= 1; Html::indent_parts
         };
         for open in open_expr.find_iter(&content) {
             let open_start = open.start();
@@ -251,20 +249,24 @@ impl Html {
                 }
                 continue; // open inside open
             }
-            indent_level = sub_indent_func(self, &block_stack, sub_stack_level,
+            indent_level = sub_indent_func(self, &block_stack, stack_level,
                                            &content[i..open_start], indent_level);
             self.write_indent(indent_level);
-            self.write(open.as_str());
             let open_end = open.end();
+            let open = open.as_str();
             if content.ends_with("\n") {
+                let mut open = open.to_string();
+                let len = open.len();
+                open.truncate(len - 1);
+                self.write(&open);
                 i = open_end - 1;
             }
             else {
                 i = open_end;
+                self.write(open);
             }
             match close_expr.find(&content[i..]) {
                 Some(close_open) => {
-                    println!("{} : {}..{}", open_expr, i, close_open.start()+i);
                     self.indent_lines(&content[i..close_open.start()+i], indent_level, true, true);
                     self.write_indent(indent_level);
                     self.write(close_open.as_str());
@@ -275,7 +277,7 @@ impl Html {
                 }
             }
         }
-        indent_level = sub_indent_func(self, &block_stack, sub_stack_level, &content[i..],
+        indent_level = sub_indent_func(self, &block_stack, stack_level, &content[i..],
                                        indent_level);
         return indent_level;
     }
